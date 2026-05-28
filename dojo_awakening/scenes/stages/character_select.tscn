@@ -1,0 +1,167 @@
+[gd_scene load_steps=4 format=3 uid="uid://charselect01"]
+
+[ext_resource type="Script" path="res://scripts/character_select.gd" id="1_select"]
+
+[sub_resource type="LabelSettings" id="LabelSettings_title"]
+font_size = 48
+font_color = Color(0.9, 0.8, 0.2, 1)
+outline_size = 3
+outline_color = Color(0, 0, 0, 1)
+
+[sub_resource type="LabelSettings" id="LabelSettings_name"]
+font_size = 32
+font_color = Color(1, 1, 1, 1)
+outline_size = 2
+outline_color = Color(0, 0, 0, 1)
+
+[node name="CharacterSelect" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1_select")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.05, 0.05, 0.1, 1)
+
+[node name="TitleLabel" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -250.0
+offset_top = 30.0
+offset_right = 250.0
+offset_bottom = 90.0
+grow_horizontal = 2
+text = "SELECT FIGHTER"
+label_settings = SubResource("LabelSettings_title")
+horizontal_alignment = 1
+
+[node name="CharacterGrid" type="GridContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -280.0
+offset_top = -80.0
+offset_right = 280.0
+offset_bottom = 80.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/h_separation = 20
+theme_override_constants/v_separation = 20
+columns = 4
+
+[node name="PreviewPanel" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -350.0
+offset_top = -300.0
+offset_right = -30.0
+offset_bottom = -30.0
+grow_horizontal = 0
+grow_vertical = 0
+
+[node name="PreviewSprite" type="TextureRect" parent="PreviewPanel"]
+layout_mode = 0
+offset_left = 60.0
+offset_top = 20.0
+offset_right = 260.0
+offset_bottom = 220.0
+expand_mode = 1
+stretch_mode = 5
+
+[node name="NameLabel" type="Label" parent="PreviewPanel"]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 230.0
+offset_right = 300.0
+offset_bottom = 270.0
+text = "Character Name"
+label_settings = SubResource("LabelSettings_name")
+horizontal_alignment = 1
+
+[node name="DescLabel" type="Label" parent="PreviewPanel"]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 270.0
+offset_right = 300.0
+offset_bottom = 300.0
+text = "Description"
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="StatsContainer" type="VBoxContainer" parent="PreviewPanel"]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 310.0
+offset_right = 300.0
+offset_bottom = 460.0
+
+[node name="HealthLabel" type="Label" parent="PreviewPanel/StatsContainer"]
+layout_mode = 2
+text = "Health: 100"
+
+[node name="HealthBar" type="ProgressBar" parent="PreviewPanel/StatsContainer"]
+layout_mode = 2
+max_value = 150.0
+value = 100.0
+tint_progress = Color(0.9, 0.2, 0.2, 1)
+
+[node name="SpeedLabel" type="Label" parent="PreviewPanel/StatsContainer"]
+layout_mode = 2
+text = "Speed: 150"
+
+[node name="SpeedBar" type="ProgressBar" parent="PreviewPanel/StatsContainer"]
+layout_mode = 2
+max_value = 250.0
+value = 150.0
+tint_progress = Color(0.2, 0.6, 0.9, 1)
+
+[node name="AttackLabel" type="Label" parent="PreviewPanel/StatsContainer"]
+layout_mode = 2
+text = "Attack: 15"
+
+[node name="AttackBar" type="ProgressBar" parent="PreviewPanel/StatsContainer"]
+layout_mode = 2
+max_value = 35.0
+value = 15.0
+tint_progress = Color(0.9, 0.6, 0.2, 1)
+
+[node name="ConfirmButton" type="Button" parent="."]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -80.0
+offset_top = -80.0
+offset_right = 80.0
+offset_bottom = -40.0
+grow_horizontal = 2
+grow_vertical = 0
+text = "Confirm"
+
+[node name="BackButton" type="Button" parent="."]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 30.0
+offset_top = -80.0
+offset_right = 130.0
+offset_bottom = -40.0
+grow_vertical = 0
+text = "Back"

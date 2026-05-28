@@ -1,0 +1,76 @@
+{
+	"characters": [
+		{
+			"id": "ryuichi",
+			"name": "龙一",
+			"type": "balanced",
+			"description": "均衡型格斗家，易于上手",
+			"stats": {
+				"health": 100,
+				"speed": 150,
+				"jump_force": -380,
+				"light_punch": 8,
+				"heavy_punch": 15,
+				"light_kick": 10,
+				"heavy_kick": 20,
+				"special": 35
+			},
+			"special_move": "dragon_fist",
+			"color": "#E74C3C"
+		},
+		{
+			"id": "kage",
+			"name": "影",
+			"type": "speed",
+			"description": "速度型忍者，快速连击",
+			"stats": {
+				"health": 80,
+				"speed": 200,
+				"jump_force": -420,
+				"light_punch": 6,
+				"heavy_punch": 12,
+				"light_kick": 8,
+				"heavy_kick": 16,
+				"special": 28
+			},
+			"special_move": "shadow_strike",
+			"color": "#9B59B6"
+		},
+		{
+			"id": "tetsuzan",
+			"name": "铁山",
+			"type": "power",
+			"description": "力量型战士，高伤害慢攻速",
+			"stats": {
+				"health": 130,
+				"speed": 100,
+				"jump_force": -340,
+				"light_punch": 12,
+				"heavy_punch": 22,
+				"light_kick": 14,
+				"heavy_kick": 28,
+				"special": 45
+			},
+			"special_move": "earthquake",
+			"color": "#27AE60"
+		},
+		{
+			"id": "shimo",
+			"name": "霜",
+			"type": "tech",
+			"description": "技巧型格斗家，控制流",
+			"stats": {
+				"health": 90,
+				"speed": 160,
+				"jump_force": -380,
+				"light_punch": 7,
+				"heavy_punch": 14,
+				"light_kick": 9,
+				"heavy_kick": 18,
+				"special": 32
+			},
+			"special_move": "ice_storm",
+			"color": "#3498DB"
+		}
+	]
+}

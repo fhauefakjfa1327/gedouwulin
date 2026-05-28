@@ -1,0 +1,278 @@
+[gd_scene load_steps=10 format=3 uid="uid://battlearena01"]
+
+[ext_resource type="Script" path="res://scripts/battle_manager.gd" id="1_battle"]
+[ext_resource type="Script" path="res://scripts/shaker_camera.gd" id="2_camera"]
+[ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="5_player"]
+[ext_resource type="PackedScene" path="res://scenes/enemy/enemy.tscn" id="6_enemy"]
+[ext_resource type="Texture2D" path="res://assets/backgrounds/dojo_day.png" id="3_bg"]
+[ext_resource type="Texture2D" path="res://assets/sprites/ground_texture.png" id="4_ground"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape_ground"]
+size = Vector2(2280, 100)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape_wall"]
+size = Vector2(100, 1000)
+
+[sub_resource type="LabelSettings" id="LabelSettings_timer"]
+font_size = 48
+font_color = Color(1, 1, 1, 1)
+outline_size = 3
+outline_color = Color(0, 0, 0, 1)
+
+[node name="BattleArena" type="Node2D"]
+script = ExtResource("1_battle")
+player_scene = ExtResource("5_player")
+enemy_scene = ExtResource("6_enemy")
+
+[node name="Background" type="Sprite2D" parent="."]
+position = Vector2(640, 360)
+texture = ExtResource("3_bg")
+
+[node name="Ground" type="StaticBody2D" parent="."]
+position = Vector2(640, 650)
+collision_layer = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Ground"]
+shape = SubResource("RectangleShape_ground")
+
+[node name="GroundSprite" type="Sprite2D" parent="Ground"]
+position = Vector2(0, 0)
+scale = Vector2(8.9, 1.56)
+texture = ExtResource("4_ground")
+
+[node name="LeftWall" type="StaticBody2D" parent="."]
+position = Vector2(-500, 360)
+collision_layer = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="LeftWall"]
+shape = SubResource("RectangleShape_wall")
+
+[node name="RightWall" type="StaticBody2D" parent="."]
+position = Vector2(1780, 360)
+collision_layer = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="RightWall"]
+shape = SubResource("RectangleShape_wall")
+
+[node name="PlayerSpawn" type="Marker2D" parent="."]
+position = Vector2(300, 550)
+
+[node name="EnemySpawn" type="Marker2D" parent="."]
+position = Vector2(980, 550)
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(640, 360)
+script = ExtResource("2_camera")
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="TimerLabel" type="Label" parent="UI"]
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -60.0
+offset_top = 20.0
+offset_right = 60.0
+offset_bottom = 80.0
+grow_horizontal = 2
+text = "99:00"
+label_settings = SubResource("LabelSettings_timer")
+horizontal_alignment = 1
+
+[node name="RoundLabel" type="Label" parent="UI"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -50.0
+offset_right = 200.0
+offset_bottom = 50.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "ROUND 1"
+label_settings = SubResource("LabelSettings_timer")
+horizontal_alignment = 1
+
+[node name="CountdownLabel" type="Label" parent="UI"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = -80.0
+offset_right = 150.0
+offset_bottom = 80.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "3"
+label_settings = SubResource("LabelSettings_timer")
+horizontal_alignment = 1
+
+[node name="PlayerHealthBar" type="ProgressBar" parent="UI"]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -400.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = 50.0
+grow_horizontal = 0
+max_value = 100.0
+value = 100.0
+tint_progress = Color(0.9, 0.2, 0.2, 1)
+
+[node name="PlayerSpecialBar" type="ProgressBar" parent="UI"]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -400.0
+offset_top = 55.0
+offset_right = -20.0
+offset_bottom = 75.0
+grow_horizontal = 0
+max_value = 100.0
+value = 0.0
+tint_progress = Color(0.2, 0.6, 0.9, 1)
+
+[node name="EnemyHealthBar" type="ProgressBar" parent="UI"]
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 400.0
+offset_bottom = 50.0
+max_value = 100.0
+value = 100.0
+tint_progress = Color(0.9, 0.2, 0.2, 1)
+
+[node name="EnemySpecialBar" type="ProgressBar" parent="UI"]
+offset_left = 20.0
+offset_top = 55.0
+offset_right = 400.0
+offset_bottom = 75.0
+max_value = 100.0
+value = 0.0
+tint_progress = Color(0.2, 0.6, 0.9, 1)
+
+[node name="PauseMenu" type="Control" parent="UI"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="ColorRect" type="ColorRect" parent="UI/PauseMenu"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 0.7)
+
+[node name="VBoxContainer" type="VBoxContainer" parent="UI/PauseMenu"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -100.0
+offset_top = -100.0
+offset_right = 100.0
+offset_bottom = 100.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ResumeButton" type="Button" parent="UI/PauseMenu/VBoxContainer"]
+layout_mode = 2
+text = "Resume"
+
+[node name="RestartButton" type="Button" parent="UI/PauseMenu/VBoxContainer"]
+layout_mode = 2
+text = "Restart"
+
+[node name="MainMenuButton" type="Button" parent="UI/PauseMenu/VBoxContainer"]
+layout_mode = 2
+text = "Main Menu"
+
+[node name="QuitButton" type="Button" parent="UI/PauseMenu/VBoxContainer"]
+layout_mode = 2
+text = "Quit"
+
+[node name="ResultScreen" type="Control" parent="UI"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="ColorRect" type="ColorRect" parent="UI/ResultScreen"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 0.8)
+
+[node name="ResultLabel" type="Label" parent="UI/ResultScreen"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -100.0
+offset_right = 200.0
+offset_bottom = -20.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "YOU WIN!"
+label_settings = SubResource("LabelSettings_timer")
+horizontal_alignment = 1
+
+[node name="ScoreLabel" type="Label" parent="UI/ResultScreen"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = 20.0
+offset_right = 150.0
+offset_bottom = 60.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "Score: 2 - 1"
+label_settings = SubResource("LabelSettings_timer")
+horizontal_alignment = 1
+
+[node name="RestartButton" type="Button" parent="UI/ResultScreen"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -80.0
+offset_top = 80.0
+offset_right = 80.0
+offset_bottom = 120.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "Play Again"
+
+[node name="MainMenuButton" type="Button" parent="UI/ResultScreen"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -80.0
+offset_top = 130.0
+offset_right = 80.0
+offset_bottom = 170.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "Main Menu"
