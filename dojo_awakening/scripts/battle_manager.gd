@@ -34,13 +34,15 @@ signal match_ended(final_winner: String)
 @export var player_scene: PackedScene
 @export var enemy_scene: PackedScene
 
-# v2.5 修复：用计时器变量替代 await，避免协程死锁
+# 计时器变量
 var _intro_timer: float = 0.0
 var _countdown_timer: float = 0.0
 var _countdown_value: int = 3
 var _round_end_timer: float = 0.0
 
 func _ready():
+	print("[BattleManager] _ready() started")
+
 	if player_scene == null:
 		push_warning("player_scene not set in editor, loading manually...")
 		player_scene = load("res://scenes/player/player.tscn")
@@ -49,38 +51,48 @@ func _ready():
 		enemy_scene = load("res://scenes/enemy/enemy.tscn")
 
 	if player_scene == null:
-		push_error("Failed to load player scene!")
+		push_error("[FATAL] Failed to load player scene!")
 		return
 	if enemy_scene == null:
-		push_error("Failed to load enemy scene!")
+		push_error("[FATAL] Failed to load enemy scene!")
 		return
+
+	print("[BattleManager] player_scene loaded: ", player_scene != null)
+	print("[BattleManager] enemy_scene loaded: ", enemy_scene != null)
 
 	_setup_camera()
 	_setup_fighters()
 	_setup_ui()
+
+	# v3 修复：初始相机位置更新，确保角色在画面内
+	_update_camera()
+
 	_start_intro()
+
+	print("[BattleManager] _ready() completed")
 
 func _process(delta: float):
 	match current_state:
 		GameState.INTRO:
 			_process_intro(delta)
+			_update_camera()  # v3 修复：intro 阶段也更新相机
 		GameState.COUNTDOWN:
 			_process_countdown(delta)
+			_update_camera()  # v3 修复：countdown 阶段也更新相机
 		GameState.FIGHTING:
 			_update_timer(delta)
 			_update_camera()
 			_check_round_end()
 		GameState.ROUND_END:
 			_process_round_end(delta)
-		GameState.MATCH_END:
-			pass
+			_update_camera()  # v3 修复：round_end 阶段也更新相机
 
-# ========== v2.5 修复：同步 intro 处理（替代 await）==========
 func _start_intro():
 	current_state = GameState.INTRO
 	round_label.text = "ROUND %d" % current_round
 	round_label.visible = true
 	_intro_timer = 2.0
+	print("[BattleManager] INTRO started")
 
 func _process_intro(delta: float):
 	_intro_timer -= delta
@@ -88,13 +100,13 @@ func _process_intro(delta: float):
 		round_label.visible = false
 		_start_countdown()
 
-# ========== v2.5 修复：同步 countdown 处理（替代 await）==========
 func _start_countdown():
 	current_state = GameState.COUNTDOWN
 	countdown_label.visible = true
 	_countdown_value = 3
 	_countdown_timer = 1.0
 	countdown_label.text = str(_countdown_value)
+	print("[BattleManager] COUNTDOWN started")
 
 func _process_countdown(delta: float):
 	_countdown_timer -= delta
@@ -119,6 +131,7 @@ func _start_round():
 	if enemy and enemy.has_method("reset_fighter"):
 		enemy.reset_fighter()
 
+	print("[BattleManager] FIGHTING started, player pos: ", player.global_position if player else "null", ", enemy pos: ", enemy.global_position if enemy else "null")
 	round_started.emit(current_round)
 
 func _setup_camera():
@@ -128,14 +141,15 @@ func _setup_camera():
 	camera.limit_bottom = 800
 	camera.position_smoothing_enabled = true
 	camera.position_smoothing_speed = 5.0
+	# v3 修复：禁用位置平滑直到第一轮开始，避免初始位置偏移
+	camera.position_smoothing_enabled = false
 
 func _setup_fighters():
 	if player_scene == null or enemy_scene == null:
 		push_error("Scene resources not loaded!")
 		return
 
-	# v2.5 修复：先实例化两个角色，再一起添加到场景树
-	# 这样两者的 _ready() 中的 call_deferred("_find_opponent") 都能在场景树完整后执行
+	# 先实例化两个角色
 	player = player_scene.instantiate()
 	player.global_position = player_spawn.global_position
 	_apply_character_data(player, true)
@@ -147,6 +161,19 @@ func _setup_fighters():
 	# 一起添加进场景树
 	add_child(player)
 	add_child(enemy)
+
+	# v3 调试信息
+	print("[BattleManager] Player created at: ", player.global_position)
+	print("[BattleManager] Enemy created at: ", enemy.global_position)
+	if player.has_node("AnimatedSprite2D"):
+		var sprite = player.get_node("AnimatedSprite2D")
+		print("[BattleManager] Player sprite visible: ", sprite.visible, ", modulate: ", sprite.modulate)
+		print("[BattleManager] Player sprite frames: ", sprite.sprite_frames != null)
+		if sprite.sprite_frames != null:
+			print("[BattleManager] Player sprite animation names: ", sprite.sprite_frames.get_animation_names())
+	if enemy.has_node("AnimatedSprite2D"):
+		var sprite = enemy.get_node("AnimatedSprite2D")
+		print("[BattleManager] Enemy sprite visible: ", sprite.visible, ", modulate: ", sprite.modulate)
 
 	# 连接信号
 	if player.has_signal("died"):

@@ -1,5 +1,5 @@
 63f7b34db8d8cdea90c76aacccf841ec
-::res://::1780015390
+::res://::1780018351
 icon.svg::CompressedTexture2D::2032427638302025141::1779939290::1779968216::1::::<><><>0<>0<>f08a05371ecf6d613cd94a0a283ee94f<>res://.godot/imported/icon.svg-218a8f2b3041327d8a5756f3a245f83b.ctex::
 README.md::TextFile::-1::1779939880::0::1::::<><><>0<>0<><>::
 ::res://assets/::1779968187
@@ -204,10 +204,10 @@ character_select.tscn::PackedScene::154859642155623144::1779955474::0::1::::<><>
 main_menu.tscn::PackedScene::729044733561508::1779952138::0::1::::<><><>0<>0<><>::res://scripts/main_menu.gd<>res://assets/backgrounds/dojo_night.png
 ::res://scenes/ui/::1779968187
 hit_effect.tscn::PackedScene::14970528354789736::1779946002::0::1::::<><><>0<>0<><>::res://scripts/hit_effect.gd
-::res://scripts/::1779974063
-ai_controller.gd::GDScript::1611816498960301809::1780014993::0::1::::AIController<>CharacterBody2D<><>0<>0<><>::
+::res://scripts/::1780015576
+ai_controller.gd::GDScript::1611816498960301809::1780018282::0::1::::AIController<>CharacterBody2D<><>0<>0<><>::
 audio_manager.gd::GDScript::6736632035160403951::1779956664::0::1::::<>Node<><>0<>0<><>::
-battle_manager.gd::GDScript::3750113365071593767::1780014831::0::1::::BattleManager<>Node2D<><>0<>0<><>::
+battle_manager.gd::GDScript::3750113365071593767::1780018242::0::1::::BattleManager<>Node2D<><>0<>0<><>::
 character_select.gd::GDScript::4820211153021851299::1780014905::0::1::::<>Control<><>0<>0<><>::
 combo_display.gd::GDScript::8834258045782087477::1779956664::0::1::::<>Control<><>0<>0<><>::
 damage_number.gd::GDScript::2085900979481992560::1779956664::0::1::::<>Label<><>0<>0<><>::
@@ -215,7 +215,7 @@ fighter_base.gd::GDScript::8659757333363309085::1779956664::0::1::::<>RefCounted
 game_data.gd::GDScript::4514904540623957913::1779956664::0::1::::<>Node<><>0<>0<><>::
 hit_effect.gd::GDScript::8315397817863108157::1779956664::0::1::::<>Node2D<><>0<>0<><>::
 main_menu.gd::GDScript::406376189161117761::1779956664::0::1::::<>Control<><>0<>0<><>::
-player_controller.gd::GDScript::9084854645090653967::1780014945::0::1::::PlayerController<>CharacterBody2D<><>0<>0<><>::
+player_controller.gd::GDScript::9084854645090653967::1780018294::0::1::::PlayerController<>CharacterBody2D<><>0<>0<><>::
 resource_loader.gd::GDScript::222067547721085877::1779956664::0::1::::ResourceLoader<>Node<><>0<>0<><>::
 screen_effects.gd::GDScript::2586816332505680089::1779956664::0::1::::<>CanvasLayer<><>0<>0<><>::
 shaker_camera.gd::GDScript::7533318235295897077::1779956664::0::1::::<>Camera2D<><>0<>0<><>::

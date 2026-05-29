@@ -1,4 +1,3 @@
-ai_controller_v2.gd
 extends CharacterBody2D
 
 class_name AIController
@@ -612,3 +611,167 @@ func _evaluate_special(distance: float) -> float:
 
 func _evaluate_attack(distance: float, player_state, health_ratio: float) -> float:
 	var score = 0.0
+
+	if distance < close_range:
+		score += 0.7
+	elif distance < mid_range:
+		score += 0.3
+
+	if player_state in [State.HIT_LIGHT, State.HIT_HEAVY, State.KNOCKDOWN, State.GETUP]:
+		score += 0.5
+
+	if player_state == State.BLOCK:
+		score -= 0.3
+
+	if opponent and "health" in opponent and "max_health" in opponent:
+		if health_ratio > float(opponent.health) / opponent.max_health:
+			score += 0.2
+
+	return score * aggression
+
+func _evaluate_approach(distance: float, health_ratio: float) -> float:
+	var score = 0.0
+	if distance > close_range:
+		score += 0.5
+	if health_ratio > 0.5:
+		score += 0.2
+	return score * aggression
+
+func _evaluate_retreat(distance: float, health_ratio: float, player_state) -> float:
+	var score = 0.0
+	if health_ratio < 0.3:
+		score += 0.5
+	if player_state == State.SPECIAL:
+		score += 0.8
+	if distance < close_range * 0.5:
+		score += 0.3
+	return score * (1.0 - aggression * 0.5)
+
+func _execute_behavior(delta: float):
+	match current_ai_state:
+		AIState.DEFEND:
+			if can_block():
+				change_state(State.BLOCK)
+		AIState.ATTACK:
+			_execute_attack()
+		AIState.APPROACH:
+			_execute_approach(delta)
+		AIState.RETREAT:
+			_execute_retreat(delta)
+		AIState.SPECIAL_AI:
+			if can_special():
+				change_state(State.SPECIAL)
+		AIState.IDLE_AI:
+			if current_state == State.WALK:
+				change_state(State.IDLE)
+				velocity.x = lerp(velocity.x, 0.0, 10.0 * delta)
+
+func _execute_attack():
+	if not can_attack():
+		return
+
+	if opponent == null:
+		return
+
+	var distance = global_position.distance_to(opponent.global_position)
+
+	if distance < close_range:
+		var attack_choice = rng.randf()
+
+		if combo_skill > 0.6 and combo_count > 0 and combo_timer > 0:
+			if attack_choice < 0.4:
+				change_state(State.LIGHT_PUNCH)
+			elif attack_choice < 0.7:
+				change_state(State.LIGHT_KICK)
+			else:
+				change_state(State.HEAVY_PUNCH)
+		else:
+			if attack_choice < 0.35:
+				change_state(State.LIGHT_PUNCH)
+			elif attack_choice < 0.6:
+				change_state(State.LIGHT_KICK)
+			elif attack_choice < 0.85:
+				change_state(State.HEAVY_PUNCH)
+			else:
+				change_state(State.HEAVY_KICK)
+	elif distance < mid_range:
+		if rng.randf() < 0.7:
+			current_ai_state = AIState.APPROACH
+		else:
+			change_state(State.LIGHT_KICK)
+
+func _execute_approach(delta: float):
+	if not current_state in [State.IDLE, State.WALK]:
+		return
+
+	if opponent == null:
+		return
+
+	var dir = sign(opponent.global_position.x - global_position.x)
+	velocity.x = dir * walk_speed
+	if current_state == State.IDLE:
+		change_state(State.WALK)
+
+	if rng.randf() < 0.02 and is_on_floor() and difficulty >= Difficulty.NORMAL:
+		velocity.y = jump_force
+		change_state(State.JUMP)
+
+func _execute_retreat(delta: float):
+	if not current_state in [State.IDLE, State.WALK]:
+		return
+
+	if opponent == null:
+		return
+
+	var dir = -sign(opponent.global_position.x - global_position.x)
+	velocity.x = dir * walk_speed
+	if current_state == State.IDLE:
+		change_state(State.WALK)
+
+func _face_opponent():
+	if opponent == null:
+		return
+
+	var dir = opponent.global_position.x - global_position.x
+	if abs(dir) > 5.0:
+		facing_right = dir > 0
+		sprite.flip_h = not facing_right
+
+	var hitbox_pos = hitbox.position
+	hitbox_pos.x = abs(hitbox_pos.x) * (1.0 if facing_right else -1.0)
+	hitbox.position = hitbox_pos
+
+func _find_opponent():
+	if not is_inside_tree():
+		return
+	var fighters = get_tree().get_nodes_in_group("fighter")
+	for f in fighters:
+		if f != self:
+			opponent = f
+			break
+
+func _update_ui():
+	health_changed.emit(health, max_health)
+	special_meter_changed.emit(special_meter, max_special_meter)
+
+func can_attack() -> bool:
+	return current_state in [State.IDLE, State.WALK, State.JUMP]
+
+func can_block() -> bool:
+	return current_state in [State.IDLE, State.WALK] and is_on_floor()
+
+func can_special() -> bool:
+	return special_meter >= max_special_meter and current_state in [State.IDLE, State.WALK]
+
+func trigger_victory():
+	change_state(State.WIN)
+
+func reset_fighter():
+	health = max_health
+	special_meter = 0.0
+	combo_count = 0
+	velocity = Vector2.ZERO
+	_attack_phase = ""
+	_hitbox_deactivate()
+	change_state(State.IDLE)
+	_update_ui()
