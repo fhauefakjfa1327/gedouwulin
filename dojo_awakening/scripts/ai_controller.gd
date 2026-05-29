@@ -42,6 +42,10 @@ enum State {
 @export var knockdown_duration: float = 1.0
 @export var combo_window: float = 0.5
 
+@export var attack_max_duration: float = 1.5
+@export var special_max_duration: float = 2.0
+@export var getup_max_duration: float = 1.5
+
 @onready var sprite: AnimatedSprite2D = $AnimatedSprite2D
 @onready var hitbox: Area2D = $Hitbox
 @onready var hurtbox: Area2D = $Hurtbox
@@ -74,6 +78,21 @@ var close_range: float = 80.0
 var mid_range: float = 200.0
 var rng = RandomNumberGenerator.new()
 
+# v2.4 修复：攻击阶段追踪（同步计时器替代 await）
+var _attack_phase: String = ""
+var _attack_damage: int = 0
+var _attack_duration_remaining: float = 0.0
+var _attack_is_heavy: bool = false
+var _hitbox_was_active: bool = false
+
+# v2.4 修复：安全计时器
+var _state_safety_timer: float = 0.0
+var _max_safety_time: float = 3.0
+
+# v2.4 修复：攻击冷却
+var _attack_cooldown: float = 0.0
+var _attack_cooldown_time: float = 0.05
+
 func _ready():
 	health = max_health
 	add_to_group("fighter")
@@ -91,13 +110,28 @@ func _ready():
 	hurtbox.area_entered.connect(_on_hurtbox_entered)
 	hitbox.monitoring = false
 
+	# v2.4 修复：安全连接动画信号
+	if sprite and sprite.sprite_frames != null:
+		var has_non_looping = false
+		for anim_name in sprite.sprite_frames.get_animation_names():
+			if not sprite.sprite_frames.get_animation_loop(anim_name):
+				has_non_looping = true
+				break
+		if has_non_looping:
+			sprite.animation_finished.connect(_on_animation_finished)
+			sprite.animation_looped.connect(_on_animation_looped)
+
 	rng.randomize()
 	_apply_difficulty_settings()
 
-	_call_delayed(0.1, _find_opponent)
+	# v2.4 修复：使用 call_deferred 延迟查找对手
+	call_deferred("_find_opponent")
 	_update_ui()
 
 func _physics_process(delta: float):
+	# v2.4 修复：限制 delta
+	delta = min(delta, 0.05)
+
 	if opponent == null:
 		return
 
@@ -115,6 +149,14 @@ func _physics_process(delta: float):
 			velocity.y = 0
 
 	state_timer += delta
+	_state_safety_timer += delta
+
+	# v2.4 修复：攻击冷却递减
+	if _attack_cooldown > 0:
+		_attack_cooldown = max(0.0, _attack_cooldown - delta)
+
+	# v2.4 修复：攻击阶段计时器
+	_process_attack_phase(delta)
 
 	if combo_timer > 0:
 		combo_timer -= delta
@@ -122,11 +164,102 @@ func _physics_process(delta: float):
 			_reset_combo()
 
 	_process_state(delta)
+	_check_safety_timeout()
 	_face_opponent()
 	move_and_slide()
 
 	if state_label:
 		state_label.text = State.keys()[current_state]
+
+# ========== v2.4 核心修复：攻击阶段处理（替代 await 链）==========
+func _process_attack_phase(delta: float):
+	if _attack_phase == "":
+		return
+
+	_attack_duration_remaining -= delta
+
+	match _attack_phase:
+		"startup":
+			if _attack_duration_remaining <= 0:
+				_attack_phase = "active"
+				_attack_duration_remaining = _get_current_attack_active_time()
+				_hitbox_active(_attack_damage, _attack_duration_remaining)
+		"active":
+			if _attack_duration_remaining <= 0:
+				_hitbox_deactivate()
+				_attack_phase = "recovery"
+				_attack_duration_remaining = _get_current_attack_recovery_time()
+		"recovery":
+			if _attack_duration_remaining <= 0:
+				_attack_phase = ""
+				if current_state in [State.LIGHT_PUNCH, State.HEAVY_PUNCH,
+									 State.LIGHT_KICK, State.HEAVY_KICK, State.SPECIAL]:
+					change_state(State.IDLE)
+
+func _get_current_attack_active_time() -> float:
+	match current_state:
+		State.LIGHT_PUNCH, State.LIGHT_KICK:
+			return light_punch_active
+		State.HEAVY_PUNCH, State.HEAVY_KICK:
+			return heavy_punch_active
+		State.SPECIAL:
+			return 0.4
+	return 0.1
+
+func _get_current_attack_recovery_time() -> float:
+	match current_state:
+		State.LIGHT_PUNCH, State.LIGHT_KICK:
+			return light_punch_recovery
+		State.HEAVY_PUNCH, State.HEAVY_KICK:
+			return heavy_punch_recovery
+		State.SPECIAL:
+			return 0.5
+	return 0.1
+
+func _get_current_attack_startup_time() -> float:
+	match current_state:
+		State.LIGHT_PUNCH, State.LIGHT_KICK:
+			return light_punch_startup
+		State.HEAVY_PUNCH, State.HEAVY_KICK:
+			return heavy_punch_startup
+		State.SPECIAL:
+			return 0.3
+	return 0.1
+
+# ========== v2.4 修复：安全检查 ==========
+func _check_safety_timeout():
+	if _state_safety_timer < _max_safety_time:
+		return
+
+	match current_state:
+		State.LIGHT_PUNCH, State.HEAVY_PUNCH, State.LIGHT_KICK, State.HEAVY_KICK:
+			_hitbox_deactivate()
+			_attack_phase = ""
+			change_state(State.IDLE)
+		State.SPECIAL:
+			_hitbox_deactivate()
+			_attack_phase = ""
+			is_invincible = false
+			change_state(State.IDLE)
+		State.HIT_LIGHT, State.HIT_HEAVY:
+			if health > 0:
+				change_state(State.IDLE)
+			else:
+				change_state(State.DEAD)
+		State.KNOCKDOWN:
+			if is_on_floor():
+				change_state(State.GETUP)
+		State.GETUP:
+			change_state(State.IDLE)
+		State.BLOCK_STUN:
+			change_state(State.IDLE)
+		State.BLOCK:
+			change_state(State.IDLE)
+		_:
+			change_state(State.IDLE)
+
+	_state_safety_timer = 0.0
+	print("[AI安全超时] 强制状态转换: %s -> IDLE" % State.keys()[current_state])
 
 func _process_state(delta: float):
 	match current_state:
@@ -153,6 +286,8 @@ func _process_state(delta: float):
 				sprite.play("fall")
 		State.LIGHT_PUNCH, State.HEAVY_PUNCH, State.LIGHT_KICK, State.HEAVY_KICK:
 			velocity.x = lerp(velocity.x, 0.0, 15.0 * delta)
+			if sprite and not sprite.is_playing() and _attack_phase == "":
+				change_state(State.IDLE)
 		State.BLOCK:
 			velocity.x = lerp(velocity.x, 0.0, 20.0 * delta)
 			if sprite and sprite.animation != "block":
@@ -173,11 +308,16 @@ func _process_state(delta: float):
 				change_state(State.GETUP)
 		State.GETUP:
 			velocity.x = lerp(velocity.x, 0.0, 20.0 * delta)
-			if sprite and not sprite.is_playing():
+			if state_timer >= getup_max_duration:
+				change_state(State.IDLE)
+			elif sprite and not sprite.is_playing():
 				change_state(State.IDLE)
 		State.SPECIAL:
 			velocity.x = lerp(velocity.x, 0.0, 15.0 * delta)
-			if sprite and not sprite.is_playing():
+			if state_timer >= special_max_duration:
+				is_invincible = false
+				change_state(State.IDLE)
+			elif sprite and not sprite.is_playing() and _attack_phase == "":
 				change_state(State.IDLE)
 		State.WIN:
 			velocity.x = lerp(velocity.x, 0.0, 20.0 * delta)
@@ -192,11 +332,18 @@ func change_state(new_state: State):
 	if current_state == new_state:
 		return
 
+	# v2.4 修复：退出攻击状态时清理
+	if current_state in [State.LIGHT_PUNCH, State.HEAVY_PUNCH, State.LIGHT_KICK,
+						 State.HEAVY_KICK, State.SPECIAL]:
+		_hitbox_deactivate()
+		_attack_phase = ""
+
 	if current_state == State.KNOCKDOWN or current_state == State.SPECIAL:
 		is_invincible = false
 
 	current_state = new_state
 	state_timer = 0.0
+	_state_safety_timer = 0.0
 
 	match new_state:
 		State.IDLE:
@@ -208,13 +355,17 @@ func change_state(new_state: State):
 		State.FALL:
 			if sprite: sprite.play("fall")
 		State.LIGHT_PUNCH:
-			_start_attack("light_punch", light_punch_damage, light_punch_startup, light_punch_active, light_punch_recovery)
+			_start_attack_sync(light_punch_damage, light_punch_startup, false)
+			if sprite: sprite.play("light_punch")
 		State.HEAVY_PUNCH:
-			_start_attack("heavy_punch", heavy_punch_damage, heavy_punch_startup, heavy_punch_active, heavy_punch_recovery)
+			_start_attack_sync(heavy_punch_damage, heavy_punch_startup, true)
+			if sprite: sprite.play("heavy_punch")
 		State.LIGHT_KICK:
-			_start_attack("light_kick", light_kick_damage, light_punch_startup, light_punch_active, light_punch_recovery)
+			_start_attack_sync(light_kick_damage, light_punch_startup, false)
+			if sprite: sprite.play("light_kick")
 		State.HEAVY_KICK:
-			_start_attack("heavy_kick", heavy_kick_damage, heavy_punch_startup, heavy_punch_active, heavy_punch_recovery)
+			_start_attack_sync(heavy_kick_damage, heavy_punch_startup, true)
+			if sprite: sprite.play("heavy_kick")
 		State.BLOCK:
 			if sprite: sprite.play("block")
 		State.BLOCK_STUN:
@@ -229,7 +380,8 @@ func change_state(new_state: State):
 		State.GETUP:
 			if sprite: sprite.play("getup")
 		State.SPECIAL:
-			_start_special_attack()
+			_start_special_attack_sync()
+			if sprite: sprite.play("special")
 		State.WIN:
 			if sprite: sprite.play("win")
 			victory.emit()
@@ -237,52 +389,56 @@ func change_state(new_state: State):
 			if sprite: sprite.play("dead")
 			died.emit()
 
-func _start_attack(anim_name: String, damage: int, startup: float, active: float, recovery: float):
-	if sprite:
-		sprite.play(anim_name)
+# ========== v2.4 核心修复：同步攻击启动 ==========
+func _start_attack_sync(damage: int, startup: float, is_heavy: bool):
+	_attack_phase = "startup"
+	_attack_damage = damage
+	_attack_is_heavy = is_heavy
+	_attack_duration_remaining = startup
+	_hitbox_was_active = false
 
-	await get_tree().create_timer(startup).timeout
-	if current_state not in [State.LIGHT_PUNCH, State.HEAVY_PUNCH, State.LIGHT_KICK, State.HEAVY_KICK]:
-		return
-
-	_hitbox_active(damage, active)
-
-	await get_tree().create_timer(recovery).timeout
-	if current_state not in [State.LIGHT_PUNCH, State.HEAVY_PUNCH, State.LIGHT_KICK, State.HEAVY_KICK]:
-		return
-
-	change_state(State.IDLE)
+func _start_special_attack_sync():
+	is_invincible = true
+	special_meter = 0.0
+	special_meter_changed.emit(special_meter, max_special_meter)
+	_attack_phase = "startup"
+	_attack_damage = special_damage
+	_attack_is_heavy = true
+	_attack_duration_remaining = 0.3
+	_hitbox_was_active = false
 
 func _hitbox_active(damage: int, duration: float):
 	hitbox.monitoring = true
+	_hitbox_was_active = true
 	var attack_data = {
 		"damage": damage,
 		"knockback": Vector2(80.0 * (1.0 if facing_right else -1.0), -30.0),
 		"hit_stun": hit_stun_duration,
 		"attacker": self,
-		"is_heavy": damage >= 15
+		"is_heavy": damage >= 15 or _attack_is_heavy
 	}
 	hitbox.set_meta("attack_data", attack_data)
 
-	await get_tree().create_timer(duration).timeout
-	hitbox.monitoring = false
+func _hitbox_deactivate():
+	if _hitbox_was_active:
+		hitbox.monitoring = false
+		_hitbox_was_active = false
+		if hitbox.has_meta("attack_data"):
+			hitbox.remove_meta("attack_data")
 
-func _start_special_attack():
-	if sprite:
-		sprite.play("special")
-
-	is_invincible = true
-	special_meter = 0.0
-	special_meter_changed.emit(special_meter, max_special_meter)
-
-	await get_tree().create_timer(0.3).timeout
-	_hitbox_active(special_damage, 0.4)
-
-	await get_tree().create_timer(0.5).timeout
-	is_invincible = false
-
-	if sprite and not sprite.is_playing():
+# ========== 动画信号后备 ==========
+func _on_animation_finished():
+	if current_state == State.GETUP:
 		change_state(State.IDLE)
+	elif current_state in [State.LIGHT_PUNCH, State.HEAVY_PUNCH,
+						   State.LIGHT_KICK, State.HEAVY_KICK] and _attack_phase == "":
+		change_state(State.IDLE)
+	elif current_state == State.SPECIAL and _attack_phase == "":
+		is_invincible = false
+		change_state(State.IDLE)
+
+func _on_animation_looped():
+	pass
 
 func _on_hurtbox_entered(area: Area2D):
 	if not area.is_in_group("hitbox"):
@@ -310,6 +466,12 @@ func _take_damage(attack_data: Dictionary):
 	var is_heavy: bool = attack_data["is_heavy"]
 	var attacker = attack_data["attacker"]
 
+	# v2.4 修复：如果正在攻击，强制取消
+	if current_state in [State.LIGHT_PUNCH, State.HEAVY_PUNCH,
+						 State.LIGHT_KICK, State.HEAVY_KICK, State.SPECIAL]:
+		_hitbox_deactivate()
+		_attack_phase = ""
+
 	if current_state == State.BLOCK:
 		var block_direction = 1.0 if facing_right else -1.0
 		var attack_direction = sign(knockback.x)
@@ -334,15 +496,15 @@ func _take_damage(attack_data: Dictionary):
 		if attacker and attacker.has_method("_gain_special"):
 			attacker.special_meter = min(attacker.special_meter + 5.0, attacker.max_special_meter)
 
-		if attacker and attacker.has_method("_register_hit"):
-			attacker._register_hit(damage)
+	if attacker and attacker.has_method("_register_hit"):
+		attacker._register_hit(damage)
 
-		if is_heavy and health > 0:
-			change_state(State.KNOCKDOWN)
-		elif health > 0:
-			change_state(State.HIT_HEAVY if is_heavy else State.HIT_LIGHT)
-		else:
-			change_state(State.DEAD)
+	if is_heavy and health > 0:
+		change_state(State.KNOCKDOWN)
+	elif health > 0:
+		change_state(State.HIT_HEAVY if is_heavy else State.HIT_LIGHT)
+	else:
+		change_state(State.DEAD)
 
 	health = max(health, 0)
 	health_changed.emit(health, max_health)
@@ -383,8 +545,8 @@ func _apply_difficulty_settings():
 			decision_interval = 0.05
 
 func _make_decision():
-	if current_state in [State.HIT_LIGHT, State.HIT_HEAVY, State.KNOCKDOWN, 
-						State.BLOCK_STUN, State.GETUP, State.DEAD]:
+	if current_state in [State.HIT_LIGHT, State.HIT_HEAVY, State.KNOCKDOWN,
+						 State.BLOCK_STUN, State.GETUP, State.DEAD]:
 		return
 
 	var distance_to_player = global_position.distance_to(opponent.global_position)
@@ -412,7 +574,6 @@ func _make_decision():
 func _evaluate_defense(player_state, distance: float) -> float:
 	var score = 0.0
 
-	# 检查对手是否在攻击状态（通过动画名判断）
 	var is_attacking = false
 	if opponent and opponent.has_node("AnimatedSprite2D"):
 		var opp_sprite = opponent.get_node("AnimatedSprite2D")
@@ -435,8 +596,8 @@ func _evaluate_special(distance: float) -> float:
 	var score = 0.0
 	if distance < mid_range:
 		score += 0.6
-		if opponent and opponent.current_state in [State.HIT_LIGHT, State.HIT_HEAVY, State.KNOCKDOWN]:
-			score += 0.4
+	if opponent and opponent.current_state in [State.HIT_LIGHT, State.HIT_HEAVY, State.KNOCKDOWN]:
+		score += 0.4
 
 	return score * aggression
 
@@ -494,7 +655,7 @@ func _execute_behavior(delta: float):
 		AIState.IDLE_AI:
 			if current_state == State.WALK:
 				change_state(State.IDLE)
-			velocity.x = lerp(velocity.x, 0.0, 10.0 * delta)
+				velocity.x = lerp(velocity.x, 0.0, 10.0 * delta)
 
 func _execute_attack():
 	if not can_attack():
@@ -558,9 +719,9 @@ func _face_opponent():
 		facing_right = dir > 0
 		sprite.flip_h = not facing_right
 
-		var hitbox_pos = hitbox.position
-		hitbox_pos.x = abs(hitbox_pos.x) * (1.0 if facing_right else -1.0)
-		hitbox.position = hitbox_pos
+	var hitbox_pos = hitbox.position
+	hitbox_pos.x = abs(hitbox_pos.x) * (1.0 if facing_right else -1.0)
+	hitbox.position = hitbox_pos
 
 func _find_opponent():
 	var fighters = get_tree().get_nodes_in_group("fighter")
@@ -571,7 +732,8 @@ func _find_opponent():
 
 func _call_delayed(delay: float, callback: Callable):
 	await get_tree().create_timer(delay).timeout
-	callback.call()
+	if is_instance_valid(self) and not is_queued_for_deletion():
+		callback.call()
 
 func _update_ui():
 	health_changed.emit(health, max_health)
@@ -594,5 +756,7 @@ func reset_fighter():
 	special_meter = 0.0
 	combo_count = 0
 	velocity = Vector2.ZERO
+	_attack_phase = ""
+	_hitbox_deactivate()
 	change_state(State.IDLE)
 	_update_ui()

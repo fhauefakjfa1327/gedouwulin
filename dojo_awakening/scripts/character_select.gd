@@ -9,7 +9,7 @@ extends Control
 @onready var back_button: Button = $BackButton
 
 var selected_index: int = 0
-var characters = []  # 移除 Array[Dictionary] 强类型
+var characters = [] # 移除 Array[Dictionary] 强类型
 var is_locked: bool = false
 
 func _ready():
@@ -24,7 +24,7 @@ func _load_characters():
 		var error = json.parse(file.get_as_text())
 		if error == OK:
 			var data = json.get_data()
-			characters = data["characters"]  # 直接赋值，不强类型检查
+			characters = data["characters"] # 直接赋值，不强类型检查
 
 func _setup_ui():
 	# 创建角色选择按钮
@@ -100,9 +100,9 @@ func _update_stat_bar(stat_name: String, value: int, max_value: int):
 		bar.max_value = max_value
 		bar.value = value
 
-		var label = stats_container.get_node(stat_name + "Label")
-		if label:
-			label.text = "%s: %d" % [stat_name, value]
+	var label = stats_container.get_node(stat_name + "Label")
+	if label:
+		label.text = "%s: %d" % [stat_name, value]
 
 func _on_confirm():
 	if is_locked:
@@ -113,12 +113,21 @@ func _on_confirm():
 	var selected = characters[selected_index]
 	GameData.selected_character = selected
 
-	# 过渡到战斗场景
+	# 修复：使用 call_deferred 延迟场景切换，避免与 tween 竞争
+	# 同时禁用输入处理防止重复触发
+	set_process_input(false)
+
+	# 过渡到战斗场景 - 使用更安全的场景切换方式
 	var tween = create_tween()
 	tween.tween_property(self, "modulate:a", 0.0, 0.5)
-	tween.tween_callback(func():
-		get_tree().change_scene_to_file("res://scenes/stages/battle_arena.tscn")
-	)
+	tween.tween_callback(_do_scene_change)
+
+func _do_scene_change():
+	# 确保在当前帧结束后切换场景，避免信号/回调冲突
+	call_deferred("_change_scene_deferred")
+
+func _change_scene_deferred():
+	get_tree().change_scene_to_file("res://scenes/stages/battle_arena.tscn")
 
 func _on_back():
 	get_tree().change_scene_to_file("res://scenes/stages/main_menu.tscn")

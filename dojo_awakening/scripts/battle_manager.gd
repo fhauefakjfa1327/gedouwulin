@@ -31,16 +31,19 @@ signal round_started(round_num: int)
 signal round_ended(winner: CharacterBody2D)
 signal match_ended(final_winner: String)
 
-# 场景引用 - 使用 @onready 确保在场景树构建完成后加载
-@onready var player_scene: PackedScene
-@onready var enemy_scene: PackedScene
+# 修复1: @onready 改为 @export，让编辑器中的场景引用生效
+@export var player_scene: PackedScene
+@export var enemy_scene: PackedScene
 
 func _ready():
-	# 延迟加载场景资源，确保文件系统已就绪
-	await get_tree().process_frame
-
-	player_scene = load("res://scenes/player/player.tscn")
-	enemy_scene = load("res://scenes/enemy/enemy.tscn")
+	# 修复2: 移除 await get_tree().process_frame，直接检查引用
+	# 如果 @export 的引用为空（编辑器未设置），再尝试加载
+	if player_scene == null:
+		push_warning("player_scene not set in editor, loading manually...")
+		player_scene = load("res://scenes/player/player.tscn")
+	if enemy_scene == null:
+		push_warning("enemy_scene not set in editor, loading manually...")
+		enemy_scene = load("res://scenes/enemy/enemy.tscn")
 
 	if player_scene == null:
 		push_error("Failed to load player scene!")
@@ -107,17 +110,16 @@ func _apply_character_data(fighter, is_player: bool):
 	if fighter == null:
 		return
 
-	if is_player and GameData.selected_character.has("stats"):
+	if is_player and GameData.selected_character != null and GameData.selected_character.has("stats"):
 		var stats = GameData.selected_character["stats"]
-		if fighter.has_method("set") or fighter.get_property_list().size() > 0:
-			fighter.max_health = stats.get("health", 100)
-			fighter.health = stats.get("health", 100)
-			fighter.walk_speed = stats.get("speed", 150)
-			fighter.light_punch_damage = stats.get("light_punch", 8)
-			fighter.heavy_punch_damage = stats.get("heavy_punch", 15)
-			fighter.light_kick_damage = stats.get("light_kick", 10)
-			fighter.heavy_kick_damage = stats.get("heavy_kick", 20)
-			fighter.special_damage = stats.get("special", 35)
+		fighter.max_health = stats.get("health", 100)
+		fighter.health = stats.get("health", 100)
+		fighter.walk_speed = stats.get("speed", 150)
+		fighter.light_punch_damage = stats.get("light_punch", 8)
+		fighter.heavy_punch_damage = stats.get("heavy_punch", 15)
+		fighter.light_kick_damage = stats.get("light_kick", 10)
+		fighter.heavy_kick_damage = stats.get("heavy_kick", 20)
+		fighter.special_damage = stats.get("special", 35)
 
 func _setup_ui():
 	pause_menu.visible = false
@@ -354,4 +356,4 @@ func _on_quit_button_pressed():
 
 func shake_camera(duration: float, intensity: float):
 	if camera and camera.has_method("shake"):
-		camera.shake(duration, intensity)
+	camera.shake(duration, intensity)
