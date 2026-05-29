@@ -31,13 +31,16 @@ signal round_started(round_num: int)
 signal round_ended(winner: CharacterBody2D)
 signal match_ended(final_winner: String)
 
-# 修复1: @onready 改为 @export，让编辑器中的场景引用生效
 @export var player_scene: PackedScene
 @export var enemy_scene: PackedScene
 
+# v2.5 修复：用计时器变量替代 await，避免协程死锁
+var _intro_timer: float = 0.0
+var _countdown_timer: float = 0.0
+var _countdown_value: int = 3
+var _round_end_timer: float = 0.0
+
 func _ready():
-	# 修复2: 移除 await get_tree().process_frame，直接检查引用
-	# 如果 @export 的引用为空（编辑器未设置），再尝试加载
 	if player_scene == null:
 		push_warning("player_scene not set in editor, loading manually...")
 		player_scene = load("res://scenes/player/player.tscn")
@@ -59,10 +62,64 @@ func _ready():
 
 func _process(delta: float):
 	match current_state:
+		GameState.INTRO:
+			_process_intro(delta)
+		GameState.COUNTDOWN:
+			_process_countdown(delta)
 		GameState.FIGHTING:
 			_update_timer(delta)
 			_update_camera()
 			_check_round_end()
+		GameState.ROUND_END:
+			_process_round_end(delta)
+		GameState.MATCH_END:
+			pass
+
+# ========== v2.5 修复：同步 intro 处理（替代 await）==========
+func _start_intro():
+	current_state = GameState.INTRO
+	round_label.text = "ROUND %d" % current_round
+	round_label.visible = true
+	_intro_timer = 2.0
+
+func _process_intro(delta: float):
+	_intro_timer -= delta
+	if _intro_timer <= 0:
+		round_label.visible = false
+		_start_countdown()
+
+# ========== v2.5 修复：同步 countdown 处理（替代 await）==========
+func _start_countdown():
+	current_state = GameState.COUNTDOWN
+	countdown_label.visible = true
+	_countdown_value = 3
+	_countdown_timer = 1.0
+	countdown_label.text = str(_countdown_value)
+
+func _process_countdown(delta: float):
+	_countdown_timer -= delta
+	if _countdown_timer <= 0:
+		_countdown_value -= 1
+		if _countdown_value > 0:
+			countdown_label.text = str(_countdown_value)
+			_countdown_timer = 1.0
+		elif _countdown_value == 0:
+			countdown_label.text = "FIGHT!"
+			_countdown_timer = 0.5
+		else:
+			countdown_label.visible = false
+			_start_round()
+
+func _start_round():
+	current_state = GameState.FIGHTING
+	time_remaining = round_time
+
+	if player and player.has_method("reset_fighter"):
+		player.reset_fighter()
+	if enemy and enemy.has_method("reset_fighter"):
+		enemy.reset_fighter()
+
+	round_started.emit(current_round)
 
 func _setup_camera():
 	camera.limit_left = -500
@@ -77,22 +134,18 @@ func _setup_fighters():
 		push_error("Scene resources not loaded!")
 		return
 
-	# 实例化玩家
+	# v2.5 修复：先实例化两个角色，再一起添加到场景树
+	# 这样两者的 _ready() 中的 call_deferred("_find_opponent") 都能在场景树完整后执行
 	player = player_scene.instantiate()
 	player.global_position = player_spawn.global_position
-
-	# 应用选择的角色数据
 	_apply_character_data(player, true)
 
-	add_child(player)
-
-	# 实例化敌人
 	enemy = enemy_scene.instantiate()
 	enemy.global_position = enemy_spawn.global_position
-
-	# 随机选择敌人角色（或使用固定角色）
 	_apply_character_data(enemy, false)
 
+	# 一起添加进场景树
+	add_child(player)
 	add_child(enemy)
 
 	# 连接信号
@@ -106,7 +159,6 @@ func _setup_fighters():
 		enemy.victory.connect(_on_fighter_victory.bind(enemy))
 
 func _apply_character_data(fighter, is_player: bool):
-	# 安全地应用角色属性
 	if fighter == null:
 		return
 
@@ -134,41 +186,6 @@ func _setup_ui():
 		enemy.health_changed.connect(_on_enemy_health_changed)
 	if enemy and enemy.has_signal("special_meter_changed"):
 		enemy.special_meter_changed.connect(_on_enemy_special_changed)
-
-func _start_intro():
-	current_state = GameState.INTRO
-	round_label.text = "ROUND %d" % current_round
-	round_label.visible = true
-
-	await get_tree().create_timer(2.0).timeout
-	round_label.visible = false
-
-	_start_countdown()
-
-func _start_countdown():
-	current_state = GameState.COUNTDOWN
-	countdown_label.visible = true
-
-	for i in range(3, 0, -1):
-		countdown_label.text = str(i)
-		await get_tree().create_timer(1.0).timeout
-
-	countdown_label.text = "FIGHT!"
-	await get_tree().create_timer(0.5).timeout
-	countdown_label.visible = false
-
-	_start_round()
-
-func _start_round():
-	current_state = GameState.FIGHTING
-	time_remaining = round_time
-
-	if player and player.has_method("reset_fighter"):
-		player.reset_fighter()
-	if enemy and enemy.has_method("reset_fighter"):
-		enemy.reset_fighter()
-
-	round_started.emit(current_round)
 
 func _update_timer(delta: float):
 	time_remaining -= delta
@@ -218,15 +235,17 @@ func _end_round(winner: CharacterBody2D):
 	var winner_name = "PLAYER" if winner == player else "CPU"
 	round_label.text = "%s WINS!" % winner_name
 	round_label.visible = true
+	_round_end_timer = 2.0
 
-	await get_tree().create_timer(2.0).timeout
-	round_label.visible = false
-
-	if player_score >= 2 or enemy_score >= 2 or current_round >= max_rounds:
-		_end_match()
-	else:
-		current_round += 1
-		_start_intro()
+func _process_round_end(delta: float):
+	_round_end_timer -= delta
+	if _round_end_timer <= 0:
+		round_label.visible = false
+		if player_score >= 2 or enemy_score >= 2 or current_round >= max_rounds:
+			_end_match()
+		else:
+			current_round += 1
+			_start_intro()
 
 func _end_round_by_timeout():
 	current_state = GameState.ROUND_END
@@ -250,14 +269,7 @@ func _end_round_by_timeout():
 		round_label.text = "TIME OVER - DRAW!"
 
 	round_label.visible = true
-	await get_tree().create_timer(2.0).timeout
-	round_label.visible = false
-
-	if player_score >= 2 or enemy_score >= 2 or current_round >= max_rounds:
-		_end_match()
-	else:
-		current_round += 1
-		_start_intro()
+	_round_end_timer = 2.0
 
 func _end_match():
 	current_state = GameState.MATCH_END
@@ -356,4 +368,4 @@ func _on_quit_button_pressed():
 
 func shake_camera(duration: float, intensity: float):
 	if camera and camera.has_method("shake"):
-	camera.shake(duration, intensity)
+		camera.shake(duration, intensity)

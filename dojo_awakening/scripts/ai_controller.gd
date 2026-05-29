@@ -1,8 +1,8 @@
+ai_controller_v2.gd
 extends CharacterBody2D
 
 class_name AIController
 
-# ========== AI 难度配置 ==========
 enum Difficulty { EASY, NORMAL, HARD, EXPERT }
 
 @export var difficulty: Difficulty = Difficulty.NORMAL
@@ -10,7 +10,6 @@ enum Difficulty { EASY, NORMAL, HARD, EXPERT }
 @export var aggression: float = 0.5
 @export var combo_skill: float = 0.5
 
-# ========== 复制 Fighter 基类变量 ==========
 enum State {
 	IDLE, WALK, JUMP, FALL,
 	LIGHT_PUNCH, HEAVY_PUNCH, LIGHT_KICK, HEAVY_KICK,
@@ -69,7 +68,6 @@ signal combo_executed(combo_count: int, total_damage: int)
 signal died
 signal victory
 
-# AI 状态
 enum AIState { APPROACH, RETREAT, ATTACK, DEFEND, IDLE_AI, SPECIAL_AI }
 var current_ai_state: AIState = AIState.APPROACH
 var decision_timer: float = 0.0
@@ -78,18 +76,15 @@ var close_range: float = 80.0
 var mid_range: float = 200.0
 var rng = RandomNumberGenerator.new()
 
-# v2.4 修复：攻击阶段追踪（同步计时器替代 await）
 var _attack_phase: String = ""
 var _attack_damage: int = 0
 var _attack_duration_remaining: float = 0.0
 var _attack_is_heavy: bool = false
 var _hitbox_was_active: bool = false
 
-# v2.4 修复：安全计时器
 var _state_safety_timer: float = 0.0
 var _max_safety_time: float = 3.0
 
-# v2.4 修复：攻击冷却
 var _attack_cooldown: float = 0.0
 var _attack_cooldown_time: float = 0.05
 
@@ -110,7 +105,6 @@ func _ready():
 	hurtbox.area_entered.connect(_on_hurtbox_entered)
 	hitbox.monitoring = false
 
-	# v2.4 修复：安全连接动画信号
 	if sprite and sprite.sprite_frames != null:
 		var has_non_looping = false
 		for anim_name in sprite.sprite_frames.get_animation_names():
@@ -124,16 +118,24 @@ func _ready():
 	rng.randomize()
 	_apply_difficulty_settings()
 
-	# v2.4 修复：使用 call_deferred 延迟查找对手
+	# v2.5 修复：使用 call_deferred 并添加 is_inside_tree 检查
 	call_deferred("_find_opponent")
 	_update_ui()
 
 func _physics_process(delta: float):
-	# v2.4 修复：限制 delta
 	delta = min(delta, 0.05)
 
+	# v2.5 修复：如果 opponent 为 null，提前返回避免崩溃
 	if opponent == null:
-		return
+		# 尝试重新查找对手
+		if is_inside_tree() and get_tree() != null:
+			_find_opponent()
+		if opponent == null:
+			# 没有对手时只做基础物理更新
+			if not is_on_floor():
+				velocity.y += gravity * delta
+			move_and_slide()
+			return
 
 	decision_timer += delta
 	if decision_timer >= decision_interval:
@@ -151,11 +153,9 @@ func _physics_process(delta: float):
 	state_timer += delta
 	_state_safety_timer += delta
 
-	# v2.4 修复：攻击冷却递减
 	if _attack_cooldown > 0:
 		_attack_cooldown = max(0.0, _attack_cooldown - delta)
 
-	# v2.4 修复：攻击阶段计时器
 	_process_attack_phase(delta)
 
 	if combo_timer > 0:
@@ -171,7 +171,6 @@ func _physics_process(delta: float):
 	if state_label:
 		state_label.text = State.keys()[current_state]
 
-# ========== v2.4 核心修复：攻击阶段处理（替代 await 链）==========
 func _process_attack_phase(delta: float):
 	if _attack_phase == "":
 		return
@@ -226,7 +225,6 @@ func _get_current_attack_startup_time() -> float:
 			return 0.3
 	return 0.1
 
-# ========== v2.4 修复：安全检查 ==========
 func _check_safety_timeout():
 	if _state_safety_timer < _max_safety_time:
 		return
@@ -332,7 +330,6 @@ func change_state(new_state: State):
 	if current_state == new_state:
 		return
 
-	# v2.4 修复：退出攻击状态时清理
 	if current_state in [State.LIGHT_PUNCH, State.HEAVY_PUNCH, State.LIGHT_KICK,
 						 State.HEAVY_KICK, State.SPECIAL]:
 		_hitbox_deactivate()
@@ -389,7 +386,6 @@ func change_state(new_state: State):
 			if sprite: sprite.play("dead")
 			died.emit()
 
-# ========== v2.4 核心修复：同步攻击启动 ==========
 func _start_attack_sync(damage: int, startup: float, is_heavy: bool):
 	_attack_phase = "startup"
 	_attack_damage = damage
@@ -426,7 +422,6 @@ func _hitbox_deactivate():
 		if hitbox.has_meta("attack_data"):
 			hitbox.remove_meta("attack_data")
 
-# ========== 动画信号后备 ==========
 func _on_animation_finished():
 	if current_state == State.GETUP:
 		change_state(State.IDLE)
@@ -466,7 +461,6 @@ func _take_damage(attack_data: Dictionary):
 	var is_heavy: bool = attack_data["is_heavy"]
 	var attacker = attack_data["attacker"]
 
-	# v2.4 修复：如果正在攻击，强制取消
 	if current_state in [State.LIGHT_PUNCH, State.HEAVY_PUNCH,
 						 State.LIGHT_KICK, State.HEAVY_KICK, State.SPECIAL]:
 		_hitbox_deactivate()
@@ -496,15 +490,15 @@ func _take_damage(attack_data: Dictionary):
 		if attacker and attacker.has_method("_gain_special"):
 			attacker.special_meter = min(attacker.special_meter + 5.0, attacker.max_special_meter)
 
-	if attacker and attacker.has_method("_register_hit"):
-		attacker._register_hit(damage)
+		if attacker and attacker.has_method("_register_hit"):
+			attacker._register_hit(damage)
 
-	if is_heavy and health > 0:
-		change_state(State.KNOCKDOWN)
-	elif health > 0:
-		change_state(State.HIT_HEAVY if is_heavy else State.HIT_LIGHT)
-	else:
-		change_state(State.DEAD)
+		if is_heavy and health > 0:
+			change_state(State.KNOCKDOWN)
+		elif health > 0:
+			change_state(State.HIT_HEAVY if is_heavy else State.HIT_LIGHT)
+		else:
+			change_state(State.DEAD)
 
 	health = max(health, 0)
 	health_changed.emit(health, max_health)
@@ -549,8 +543,18 @@ func _make_decision():
 						 State.BLOCK_STUN, State.GETUP, State.DEAD]:
 		return
 
+	# v2.5 修复：安全检查 opponent
+	if opponent == null or not is_instance_valid(opponent):
+		current_ai_state = AIState.IDLE_AI
+		return
+
 	var distance_to_player = global_position.distance_to(opponent.global_position)
-	var player_state = opponent.current_state if opponent.has_method("get") else State.IDLE
+	var player_state = State.IDLE
+	if opponent.has_method("get_current_state"):
+		player_state = opponent.get_current_state()
+	elif "current_state" in opponent:
+		player_state = opponent.current_state
+
 	var health_ratio = float(health) / float(max_health)
 
 	var behaviors = {}
@@ -577,7 +581,8 @@ func _evaluate_defense(player_state, distance: float) -> float:
 	var is_attacking = false
 	if opponent and opponent.has_node("AnimatedSprite2D"):
 		var opp_sprite = opponent.get_node("AnimatedSprite2D")
-		is_attacking = opp_sprite.animation in ["light_punch", "heavy_punch", "light_kick", "heavy_kick", "special"]
+		if opp_sprite != null:
+			is_attacking = opp_sprite.animation in ["light_punch", "heavy_punch", "light_kick", "heavy_kick", "special"]
 
 	if is_attacking and distance < close_range * 1.5:
 		score += 0.8
@@ -596,167 +601,14 @@ func _evaluate_special(distance: float) -> float:
 	var score = 0.0
 	if distance < mid_range:
 		score += 0.6
-	if opponent and opponent.current_state in [State.HIT_LIGHT, State.HIT_HEAVY, State.KNOCKDOWN]:
-		score += 0.4
+	if opponent and opponent.has_method("get_current_state"):
+		if opponent.get_current_state() in [State.HIT_LIGHT, State.HIT_HEAVY, State.KNOCKDOWN]:
+			score += 0.4
+	elif opponent and "current_state" in opponent:
+		if opponent.current_state in [State.HIT_LIGHT, State.HIT_HEAVY, State.KNOCKDOWN]:
+			score += 0.4
 
 	return score * aggression
 
 func _evaluate_attack(distance: float, player_state, health_ratio: float) -> float:
 	var score = 0.0
-
-	if distance < close_range:
-		score += 0.7
-	elif distance < mid_range:
-		score += 0.3
-
-	if player_state in [State.HIT_LIGHT, State.HIT_HEAVY, State.KNOCKDOWN, State.GETUP]:
-		score += 0.5
-
-	if player_state == State.BLOCK:
-		score -= 0.3
-
-	if opponent and health_ratio > float(opponent.health) / opponent.max_health:
-		score += 0.2
-
-	return score * aggression
-
-func _evaluate_approach(distance: float, health_ratio: float) -> float:
-	var score = 0.0
-	if distance > close_range:
-		score += 0.5
-	if health_ratio > 0.5:
-		score += 0.2
-	return score * aggression
-
-func _evaluate_retreat(distance: float, health_ratio: float, player_state) -> float:
-	var score = 0.0
-	if health_ratio < 0.3:
-		score += 0.5
-	if player_state == State.SPECIAL:
-		score += 0.8
-	if distance < close_range * 0.5:
-		score += 0.3
-	return score * (1.0 - aggression * 0.5)
-
-func _execute_behavior(delta: float):
-	match current_ai_state:
-		AIState.DEFEND:
-			if can_block():
-				change_state(State.BLOCK)
-		AIState.ATTACK:
-			_execute_attack()
-		AIState.APPROACH:
-			_execute_approach(delta)
-		AIState.RETREAT:
-			_execute_retreat(delta)
-		AIState.SPECIAL_AI:
-			if can_special():
-				change_state(State.SPECIAL)
-		AIState.IDLE_AI:
-			if current_state == State.WALK:
-				change_state(State.IDLE)
-				velocity.x = lerp(velocity.x, 0.0, 10.0 * delta)
-
-func _execute_attack():
-	if not can_attack():
-		return
-
-	var distance = global_position.distance_to(opponent.global_position)
-
-	if distance < close_range:
-		var attack_choice = rng.randf()
-
-		if combo_skill > 0.6 and combo_count > 0 and combo_timer > 0:
-			if attack_choice < 0.4:
-				change_state(State.LIGHT_PUNCH)
-			elif attack_choice < 0.7:
-				change_state(State.LIGHT_KICK)
-			else:
-				change_state(State.HEAVY_PUNCH)
-		else:
-			if attack_choice < 0.35:
-				change_state(State.LIGHT_PUNCH)
-			elif attack_choice < 0.6:
-				change_state(State.LIGHT_KICK)
-			elif attack_choice < 0.85:
-				change_state(State.HEAVY_PUNCH)
-			else:
-				change_state(State.HEAVY_KICK)
-	elif distance < mid_range:
-		if rng.randf() < 0.7:
-			current_ai_state = AIState.APPROACH
-		else:
-			change_state(State.LIGHT_KICK)
-
-func _execute_approach(delta: float):
-	if not current_state in [State.IDLE, State.WALK]:
-		return
-
-	var dir = sign(opponent.global_position.x - global_position.x)
-	velocity.x = dir * walk_speed
-	if current_state == State.IDLE:
-		change_state(State.WALK)
-
-	if rng.randf() < 0.02 and is_on_floor() and difficulty >= Difficulty.NORMAL:
-		velocity.y = jump_force
-		change_state(State.JUMP)
-
-func _execute_retreat(delta: float):
-	if not current_state in [State.IDLE, State.WALK]:
-		return
-
-	var dir = -sign(opponent.global_position.x - global_position.x)
-	velocity.x = dir * walk_speed
-	if current_state == State.IDLE:
-		change_state(State.WALK)
-
-func _face_opponent():
-	if opponent == null:
-		return
-
-	var dir = opponent.global_position.x - global_position.x
-	if abs(dir) > 5.0:
-		facing_right = dir > 0
-		sprite.flip_h = not facing_right
-
-	var hitbox_pos = hitbox.position
-	hitbox_pos.x = abs(hitbox_pos.x) * (1.0 if facing_right else -1.0)
-	hitbox.position = hitbox_pos
-
-func _find_opponent():
-	var fighters = get_tree().get_nodes_in_group("fighter")
-	for f in fighters:
-		if f != self:
-			opponent = f
-			break
-
-func _call_delayed(delay: float, callback: Callable):
-	await get_tree().create_timer(delay).timeout
-	if is_instance_valid(self) and not is_queued_for_deletion():
-		callback.call()
-
-func _update_ui():
-	health_changed.emit(health, max_health)
-	special_meter_changed.emit(special_meter, max_special_meter)
-
-func can_attack() -> bool:
-	return current_state in [State.IDLE, State.WALK, State.JUMP]
-
-func can_block() -> bool:
-	return current_state in [State.IDLE, State.WALK] and is_on_floor()
-
-func can_special() -> bool:
-	return special_meter >= max_special_meter and current_state in [State.IDLE, State.WALK]
-
-func trigger_victory():
-	change_state(State.WIN)
-
-func reset_fighter():
-	health = max_health
-	special_meter = 0.0
-	combo_count = 0
-	velocity = Vector2.ZERO
-	_attack_phase = ""
-	_hitbox_deactivate()
-	change_state(State.IDLE)
-	_update_ui()
